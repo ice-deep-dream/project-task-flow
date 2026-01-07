@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Tooltip } from '@douyinfe/semi-ui';
-import { IconMinus, IconPlus, IconRefresh, IconAlertTriangle } from '@douyinfe/semi-icons';
+import { IconMinus, IconPlus, IconRefresh, IconAlertTriangle, IconLink } from '@douyinfe/semi-icons';
 import classnames from 'classnames';
 import { dashboard, DashboardState } from '@lark-base-open/js-sdk';
 
@@ -17,36 +17,38 @@ import ConfigPanel from './ConfigPanel';
 const FlowChart: React.FC<{
     flowNodeData: FlowNodeData[];
     handleFlowNodeData: HandleFlowNodeData;
+    defaultConfig?: FlowConfig; // 🆕 1. 新增 Prop：接收外部传入的初始配置
 }> = React.memo((props) => {
-    // 状态管理
-    const [flowConfig, setFlowConfig] = useState<FlowConfig | undefined>(undefined);
+    // 🆕 2. 状态初始化：优先使用传入的配置
+    const [flowConfig, setFlowConfig] = useState<FlowConfig | undefined>(props.defaultConfig);
     const [currentState, setCurrentState] = useState(dashboard.state);
     const [zoom, setZoom] = useState(1);
 
-    // Refs
     const containerRef = useRef<HTMLDivElement | null>(null);
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const handleFlowNodeDataRef = useRef(props.handleFlowNodeData);
 
-    // 同步外部传入的数据处理函数
+    // 🆕 3. 监听外部配置变化 (修复 View 模式下配置不生效的问题)
+    useEffect(() => {
+        if (props.defaultConfig) {
+            setFlowConfig(props.defaultConfig);
+        }
+    }, [props.defaultConfig]);
+
     useEffect(() => {
         handleFlowNodeDataRef.current = props.handleFlowNodeData;
     }, [props.handleFlowNodeData]);
 
     const isConfigMode = useMemo(() => currentState === DashboardState.Config || currentState === DashboardState.Create, [currentState]);
 
-    // 间距配置
     const parentGapX = flowConfig?.parentGapX ?? 60;
     const childGapY = flowConfig?.childGapY ?? 30;
-
-    // 🆕 核心修复：计算是否配置了状态栏，用于传递给连线组件计算锚点高度
     const hasStatus = !!flowConfig?.statusId;
 
     const handleFlowConfig = useCallback((newData: FlowConfig) => {
         setFlowConfig(newData);
     }, []);
 
-    // 视图模式下的数据刷新逻辑
     const refreshInViewLike = useCallback(async () => {
         const stateNow = dashboard.state;
         if (!(stateNow === DashboardState.View || stateNow === DashboardState.FullScreen)) return;
@@ -58,6 +60,7 @@ const FlowChart: React.FC<{
                 handleFlowNodeDataRef.current([]);
                 return;
             }
+            // 这里依然保留，确保能获取到最新的配置（双重保险）
             setFlowConfig(savedFlowConfig);
             const newFlowData = await getFlowDate(savedFlowConfig);
             handleFlowNodeDataRef.current(Array.isArray(newFlowData) ? newFlowData : []);
@@ -66,7 +69,6 @@ const FlowChart: React.FC<{
         }
     }, []);
 
-    // 初始化与事件监听
     useEffect(() => {
         setCurrentState(dashboard.state);
         let cancelled = false;
@@ -85,9 +87,7 @@ const FlowChart: React.FC<{
                             if (!cancelled) handleFlowNodeDataRef.current(Array.isArray(flowData) ? flowData : []);
                         }
                     }
-                } catch (e) {
-                    // 忽略配置获取失败
-                }
+                } catch (e) { }
                 return;
             }
             if (stateNow === DashboardState.View || stateNow === DashboardState.FullScreen) {
@@ -117,25 +117,16 @@ const FlowChart: React.FC<{
         };
     }, [refreshInViewLike]);
 
-    // 通知宿主渲染完成
     useEffect(() => { void dashboard.setRendered(); }, [props.flowNodeData]);
 
-    // 缩放控制
     const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.1, 2));
     const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.1, 0.5));
     const handleZoomReset = () => setZoom(1);
 
     return (
         <main className={classnames({ main: true, 'main-config': isConfigMode })} style={{ backgroundColor: TOKEN.colorBgPage }}>
-
-            {/* 🆕 画布容器：包含滚动区域和缩放控件 */}
             <div className="canvas-container">
-
-                {/* 滚动区域 */}
-                <div
-                    ref={containerRef}
-                    className="flow-chart"
-                >
+                <div ref={containerRef} className="flow-chart">
                     <div
                         ref={wrapperRef}
                         style={{
@@ -149,10 +140,9 @@ const FlowChart: React.FC<{
                             minWidth: '100%',
                             minHeight: '100%',
                             position: 'relative',
-                            padding: '40px' // 这里的 padding 保证缩放时内容不贴边
+                            padding: '40px'
                         }}
                     >
-                        {/* 🆕 连线组件：传入 hasStatus 以修正锚点高度 */}
                         <FlowConnectors
                             wrapperRef={wrapperRef}
                             flowNodeData={props.flowNodeData}
@@ -163,7 +153,6 @@ const FlowChart: React.FC<{
                         {props.flowNodeData && props.flowNodeData.length > 0 ? (
                             props.flowNodeData.map((item) => {
                                 const statusStyle = getStatusStyle(item.status);
-                                // 逾期判断
                                 const isOverdue = checkIsOverdue(
                                     item.planDate,
                                     item.finishDate,
@@ -194,7 +183,7 @@ const FlowChart: React.FC<{
                                             style={{
                                                 backgroundColor: TOKEN.colorBgCard,
                                                 borderRadius: TOKEN.radius,
-                                                border: `1px solid ${isOverdue ? TOKEN.colorRed : TOKEN.colorBorder}`,
+                                                border: `1px solid ${TOKEN.colorBorder}`,
                                                 boxShadow: TOKEN.shadowCard,
                                                 minWidth: '220px',
                                                 maxWidth: '360px',
@@ -205,7 +194,6 @@ const FlowChart: React.FC<{
                                                 paddingBottom: '12px'
                                             }}
                                         >
-                                            {/* 状态顶栏 (仅当配置了状态字段时显示) */}
                                             {flowConfig?.statusId && (
                                                 <div style={{
                                                     backgroundColor: statusStyle.bg,
@@ -228,6 +216,7 @@ const FlowChart: React.FC<{
                                             )}
 
                                             <div style={{ padding: '10px 12px 0 12px' }}>
+                                                {/* 🆕 父节点标题区域 */}
                                                 <div className="title" style={{
                                                     fontSize: '14px',
                                                     fontWeight: 600,
@@ -235,14 +224,37 @@ const FlowChart: React.FC<{
                                                     marginBottom: flowConfig?.targetDataId ? '10px' : '0',
                                                     lineHeight: '1.4',
                                                     whiteSpace: 'normal',
-                                                    wordBreak: 'break-word'
+                                                    wordBreak: 'break-word',
+                                                    display: 'flex',
+                                                    alignItems: 'flex-start',
+                                                    gap: '6px'
                                                 }}>
-                                                    <a target="_blank" rel="noopener noreferrer" href={`https://applink.feishu.cn/client/todo/detail?guid=${item.recordID}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                                                    <a target="_blank" rel="noopener noreferrer" href={`https://applink.feishu.cn/client/todo/detail?guid=${item.recordID}`} style={{ color: 'inherit', textDecoration: 'none', flex: 1 }}>
                                                         {item.title}
                                                     </a>
+
+                                                    {/* 🆕 超链接图标 */}
+                                                    {item.link && (
+                                                        <Tooltip content="打开链接" position="top">
+                                                            <a
+                                                                href={item.link}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    color: TOKEN.primary,
+                                                                    cursor: 'pointer',
+                                                                    flexShrink: 0
+                                                                }}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                <IconLink size="small" />
+                                                            </a>
+                                                        </Tooltip>
+                                                    )}
                                                 </div>
 
-                                                {/* 日期栏 (仅当配置了计划日期时显示) */}
                                                 {flowConfig?.targetDataId && (
                                                     <div style={{
                                                         display: 'flex',
@@ -302,7 +314,7 @@ const FlowChart: React.FC<{
                                                             style={{
                                                                 backgroundColor: TOKEN.colorBgCard,
                                                                 borderRadius: '6px',
-                                                                border: `1px solid ${isChildOverdue ? TOKEN.colorRed : TOKEN.colorBorder}`,
+                                                                border: `1px solid ${TOKEN.colorBorder}`,
                                                                 padding: '8px 10px',
                                                                 width: '200px',
                                                                 boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
@@ -316,14 +328,15 @@ const FlowChart: React.FC<{
                                                                 minHeight: hasFooter ? '56px' : 'auto'
                                                             }}
                                                             onMouseEnter={(e) => {
-                                                                if (!isChildOverdue) e.currentTarget.style.borderColor = TOKEN.colors.blue.border;
+                                                                e.currentTarget.style.borderColor = TOKEN.colors.blue.border;
                                                                 e.currentTarget.style.boxShadow = TOKEN.shadowCardHover;
                                                             }}
                                                             onMouseLeave={(e) => {
-                                                                if (!isChildOverdue) e.currentTarget.style.borderColor = TOKEN.colorBorder;
+                                                                e.currentTarget.style.borderColor = TOKEN.colorBorder;
                                                                 e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.02)';
                                                             }}
                                                         >
+                                                            {/* 🆕 子节点标题区域 */}
                                                             <div
                                                                 className="title"
                                                                 style={{
@@ -335,11 +348,33 @@ const FlowChart: React.FC<{
                                                                     wordBreak: 'break-word',
                                                                     lineHeight: '1.4',
                                                                     textAlign: 'left',
-                                                                    marginBottom: hasFooter ? '4px' : '0'
+                                                                    marginBottom: hasFooter ? '4px' : '0',
+                                                                    display: 'flex',
+                                                                    alignItems: 'flex-start',
+                                                                    gap: '4px'
                                                                 }}
                                                             >
-                                                                {isChildOverdue && <IconAlertTriangle style={{ color: TOKEN.colorRed, fontSize: 12, marginRight: 4, verticalAlign: '-1px' }} />}
-                                                                {child.title}
+                                                                {isChildOverdue && <IconAlertTriangle style={{ color: TOKEN.colorRed, fontSize: 12, marginRight: 4, verticalAlign: '-1px', flexShrink: 0 }} />}
+                                                                <span style={{ flex: 1 }}>{child.title}</span>
+
+                                                                {/* 🆕 子节点超链接图标 */}
+                                                                {child.link && (
+                                                                    <a
+                                                                        href={child.link}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        style={{
+                                                                            display: 'inline-flex',
+                                                                            alignItems: 'center',
+                                                                            color: TOKEN.primary,
+                                                                            cursor: 'pointer',
+                                                                            flexShrink: 0
+                                                                        }}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                    >
+                                                                        <IconLink size="small" />
+                                                                    </a>
+                                                                )}
                                                             </div>
 
                                                             {hasFooter && (
@@ -397,7 +432,6 @@ const FlowChart: React.FC<{
                     </div>
                 </div>
 
-                {/* 🆕 缩放控件：绝对定位在左下角 */}
                 <div className="zoom-controls">
                     <Tooltip content="放大" position="right"><Button icon={<IconPlus />} theme="borderless" type="tertiary" onClick={handleZoomIn} style={{backgroundColor: '#fff', boxShadow: TOKEN.shadowCard}} /></Tooltip>
                     <Tooltip content="重置" position="right"><Button icon={<IconRefresh />} theme="borderless" type="tertiary" onClick={handleZoomReset} style={{backgroundColor: '#fff', boxShadow: TOKEN.shadowCard}} /></Tooltip>

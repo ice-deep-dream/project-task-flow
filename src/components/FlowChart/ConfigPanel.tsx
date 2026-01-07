@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Select, Toast } from '@douyinfe/semi-ui';
 import { base, dashboard } from '@lark-base-open/js-sdk';
-import { Item } from '../Item'; // 假设这是你的通用组件
+import { Item } from '../Item';
 import { DropdownOption, FlowConfig, FlowNodeData, HandleFlowConfig, HandleFlowNodeData } from './types';
 import { getFlowDate } from './utils';
 
@@ -25,6 +25,7 @@ const ConfigPanel: React.FC<{
     const [finishDateSelected, setFinishDateSelected] = useState('');
     const [statusSelected, setStatusSelected] = useState('');
     const [ownerSelected, setOwnerSelected] = useState('');
+    const [linkSelected, setLinkSelected] = useState(''); // 🆕 新增：超链接状态
     const [parentGapX, setParentGapX] = useState(60);
     const [childGapY, setChildGapY] = useState(30);
 
@@ -35,11 +36,12 @@ const ConfigPanel: React.FC<{
     const { options: targetDateOptions, setOptions: setTargetDateOptions } = useDropdownOptions();
     const { options: statusOptions, setOptions: setStatusOptions } = useDropdownOptions();
     const { options: ownerOptions, setOptions: setOwnerOptions } = useDropdownOptions();
+    const { options: linkOptions, setOptions: setLinkOptions } = useDropdownOptions(); // 🆕 新增：超链接选项
 
     const spacingOptionsX = useMemo(() => [{ value: '40', label: '紧凑 40' }, { value: '60', label: '默认 60' }, { value: '80', label: '宽松 80' }, { value: '100', label: '很宽 100' }], []);
     const spacingOptionsY = useMemo(() => [{ value: '20', label: '紧凑 20' }, { value: '30', label: '默认 30' }, { value: '40', label: '宽松 40' }, { value: '50', label: '很宽 50' }], []);
 
-    // 初始化逻辑：加载表列表 -> 读取配置 -> 回填状态 -> 加载字段
+    // 初始化逻辑
     useEffect(() => {
         let cancelled = false;
         const init = async () => {
@@ -55,7 +57,7 @@ const ConfigPanel: React.FC<{
                 if (cancelled) return;
                 setTableOptions(tableMetaArr);
 
-                // 2. 确定配置来源 (Props 优先，其次 Backend)
+                // 2. 确定配置来源
                 let activeConfig = props.flowConfig;
                 if (!activeConfig || !activeConfig.tableNameId) {
                     const res = await dashboard.getConfig();
@@ -71,6 +73,7 @@ const ConfigPanel: React.FC<{
                     setFinishDateSelected(activeConfig.finishDataId || '');
                     setStatusSelected(activeConfig.statusId || '');
                     setOwnerSelected(activeConfig.ownerId || '');
+                    setLinkSelected(activeConfig.linkId || ''); // 🆕 回填超链接
                     setParentGapX(activeConfig.parentGapX ?? 60);
                     setChildGapY(activeConfig.childGapY ?? 30);
 
@@ -94,6 +97,7 @@ const ConfigPanel: React.FC<{
             statusOptions: [] as DropdownOption[],
             recordParentOptions: [] as DropdownOption[],
             ownerOptions: [] as DropdownOption[],
+            linkOptions: [] as DropdownOption[], // 🆕
         };
         fields.forEach((field, index) => {
             const option = { value: field.fieldId, label: field.fieldName, otherKey: index };
@@ -102,12 +106,14 @@ const ConfigPanel: React.FC<{
             if (field.fieldType === 3) categories.statusOptions.push(option);
             if (field.fieldType === 18) categories.recordParentOptions.push(option);
             if (field.fieldType === 11) categories.ownerOptions.push(option);
+            if (field.fieldType === 15) categories.linkOptions.push(option); // 🆕 只筛选类型 15 (超链接)
         });
         setTitleOptions(categories.titleOptions);
         setTargetDateOptions(categories.targetDateOptions);
         setStatusOptions(categories.statusOptions);
         setRecordParentOptions(categories.recordParentOptions);
         setOwnerOptions(categories.ownerOptions);
+        setLinkOptions(categories.linkOptions); // 🆕
     };
 
     // 实时预览监听
@@ -121,6 +127,7 @@ const ConfigPanel: React.FC<{
                 finishDataId: finishDateSelected,
                 statusId: statusSelected,
                 ownerId: ownerSelected,
+                linkId: linkSelected, // 🆕
                 parentGapX,
                 childGapY,
             };
@@ -132,7 +139,8 @@ const ConfigPanel: React.FC<{
         }
     }, [
         tableSelected, titleSelected, recordParentSelected, dateSelected,
-        finishDateSelected, statusSelected, ownerSelected, parentGapX, childGapY
+        finishDateSelected, statusSelected, ownerSelected, linkSelected, // 🆕
+        parentGapX, childGapY
     ]);
 
     const handleUserChange = (setter: React.Dispatch<React.SetStateAction<any>>, value: any) => {
@@ -153,6 +161,7 @@ const ConfigPanel: React.FC<{
                 finishDataId: finishDateSelected,
                 statusId: statusSelected,
                 ownerId: ownerSelected,
+                linkId: linkSelected, // 🆕
                 parentGapX,
                 childGapY,
             };
@@ -224,9 +233,13 @@ const ConfigPanel: React.FC<{
                 <Item label="负责人">
                     <Select showClear value={ownerSelected} optionList={ownerOptions} onChange={(v) => handleUserChange(setOwnerSelected, v)} placeholder="可选：负责人" style={{ width: 180 }} />
                 </Item>
+                {/* 🆕 超链接配置项 */}
+                <Item label="超链接">
+                    <Select showClear value={linkSelected} optionList={linkOptions} onChange={(v) => handleUserChange(setLinkSelected, v)} placeholder="可选：超链接" style={{ width: 180 }} />
+                </Item>
+
                 <div style={{ borderTop: '1px solid #EFF0F1', margin: '8px 0' }}></div>
                 <Item label="父节点间距">
-                    {/* 直接设置 Number 类型，不走 handleUserChange 字符串转换 */}
                     <Select showClear value={String(parentGapX)} optionList={spacingOptionsX} onChange={(v) => setParentGapX(Number(v))} style={{ width: 180 }} />
                 </Item>
                 <Item label="子节点间距">

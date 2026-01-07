@@ -8,6 +8,7 @@ export interface FlowNodeData {
     recordID: string;
     description: string;
     owners: string;
+    link?: string; // 🆕 新增：超链接地址
     childNode: FlowNodeData[];
 }
 
@@ -20,6 +21,7 @@ export interface FlowConfig {
     finishDataId?: string;
     statusId?: string;
     ownerId?: string;
+    linkId?: string; // 🆕 新增：超链接字段ID
     parentGapX?: number;
     childGapY?: number;
 }

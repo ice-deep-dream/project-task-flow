@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
-import { base, dashboard, IOpenLink, IOpenSingleSelect } from '@lark-base-open/js-sdk';
+import { base, IOpenLink, IOpenSingleSelect } from '@lark-base-open/js-sdk';
 import { FlowConfig, FlowNodeData } from './types';
-import { StatusArrInfo } from './config'; // 假设你有一个基础配置文件
+import { StatusArrInfo } from './config';
 
 // ============================================================================
 // 🎨 样式常量与设计 Token
@@ -16,15 +16,16 @@ export const TOKEN = {
     colorLine: '#C4C8CC',
     colorRed: '#F54A45',
     colorRedBg: '#FFF2F1',
+    primary: '#3370FF', // 蓝色常量
     shadowCard: '0 2px 8px rgba(31, 35, 41, 0.04)',
     shadowCardHover: '0 6px 16px rgba(31, 35, 41, 0.08)',
     radius: '8px',
     colors: {
-        gray: { bg: '#F2F3F5', text: '#646A73', border: '#8F959E' },   // 未启动
-        blue: { bg: '#E1EAFF', text: '#3370FF', border: '#3370FF' },   // 进行中
-        green: { bg: '#E3F9E9', text: '#00B69B', border: '#00B69B' },  // 已完成
-        orange: { bg: '#FFF5E5', text: '#FF8800', border: '#FF8800' }, // 暂停
-        red: { bg: '#FEECEC', text: '#F54A45', border: '#F54A45' },    // 风险
+        gray: { bg: '#F2F3F5', text: '#646A73', border: '#8F959E' },
+        blue: { bg: '#E1EAFF', text: '#3370FF', border: '#3370FF' },
+        green: { bg: '#E3F9E9', text: '#00B69B', border: '#00B69B' },
+        orange: { bg: '#FFF5E5', text: '#FF8800', border: '#FF8800' },
+        red: { bg: '#FEECEC', text: '#F54A45', border: '#F54A45' },
     }
 };
 
@@ -32,10 +33,6 @@ export const TOKEN = {
 // 🛠️ 辅助函数
 // ============================================================================
 
-/**
- * 根据状态 ID 获取对应的颜色样式
- * 0: 未启动, 1: 进行中, 2: 已完成, 3: 暂停
- */
 export const getStatusStyle = (status: number) => {
     switch (status) {
         case 1: return TOKEN.colors.blue;
@@ -47,10 +44,6 @@ export const getStatusStyle = (status: number) => {
     }
 };
 
-/**
- * 核心逾期判断逻辑
- * 规则：必须同时配置了计划、完成、状态字段才计算逾期
- */
 export const checkIsOverdue = (
     planDate: string,
     finishDate: string,
@@ -64,13 +57,11 @@ export const checkIsOverdue = (
 
     const plan = dayjs(planDate);
 
-    // 已完成 (Status = 2)
     if (status === 2) {
         if (!finishDate) return false;
         return dayjs(finishDate).isAfter(plan, 'day');
     }
 
-    // 未完成
     return dayjs().isAfter(plan, 'day');
 };
 
@@ -123,6 +114,29 @@ export function pickLinkRecordIds(value: unknown): string[] {
     return [];
 }
 
+// 🆕 核心修复：正确解析超链接数组
+export function pickLinkUrl(value: unknown): string {
+    if (!value) return '';
+
+    // 情况1：数组 (多维表格标准返回格式)
+    // 格式: [{ type: 'url', text: '...', link: 'https://...' }]
+    if (Array.isArray(value)) {
+        // 找到第一个包含 link 属性的对象
+        const linkItem = value.find((item: any) => item && item.link);
+        return linkItem ? linkItem.link : '';
+    }
+
+    // 情况2：单对象 (兼容性处理)
+    if (isObject(value) && 'link' in value && typeof (value as any).link === 'string') {
+        return (value as any).link;
+    }
+
+    // 情况3：纯文本 (如果用户选了文本字段当链接)
+    if (typeof value === 'string') return value;
+
+    return '';
+}
+
 // ============================================================================
 // 📊 核心数据获取逻辑
 // ============================================================================
@@ -136,7 +150,6 @@ export async function getFlowDate(flowConfig: FlowConfig): Promise<FlowNodeData[
         const param = { pageSize: 200 };
         const records = await flowConfigTable[0].getRecords(param);
 
-        // 排序：按计划日期升序
         const recordSort = records.records.sort((a, b) => {
             if (!flowConfig.targetDataId) return 0;
             const dateA = new Date(a.fields[flowConfig.targetDataId] as string);
@@ -148,13 +161,11 @@ export async function getFlowDate(flowConfig: FlowConfig): Promise<FlowNodeData[
         const childWithParent: (FlowNodeData & { parentRecordID: string })[] = [];
 
         recordSort.forEach((item) => {
-            // 状态处理：强制映射文本到 ID
             let statusInfo = { value: 0 };
             if (flowConfig.statusId) {
                 const statusField = item.fields[flowConfig.statusId] as IOpenSingleSelect;
                 const statusText = pickTextFromCellValue(statusField);
 
-                // 强制映射逻辑 (0:未启动, 1:进行中, 2:已完成, 3:暂停)
                 if (statusText === '未启动') statusInfo.value = 0;
                 else if (statusText === '进行中') statusInfo.value = 1;
                 else if (statusText === '已完成') statusInfo.value = 2;
@@ -174,6 +185,10 @@ export async function getFlowDate(flowConfig: FlowConfig): Promise<FlowNodeData[
             const planDateRaw = flowConfig.targetDataId ? (item.fields[flowConfig.targetDataId] as string) : null;
             const finishDateRaw = flowConfig.finishDataId ? (item.fields[flowConfig.finishDataId] as string) : null;
 
+            // 🆕 获取超链接数据
+            const linkField = flowConfig.linkId ? item.fields[flowConfig.linkId] : null;
+            const linkUrl = pickLinkUrl(linkField); // 这里会调用修复后的函数
+
             const recordData: FlowNodeData = {
                 id: 0,
                 status: statusInfo.value,
@@ -183,6 +198,7 @@ export async function getFlowDate(flowConfig: FlowConfig): Promise<FlowNodeData[
                 recordID: item.recordId,
                 description: '',
                 owners: ownerName,
+                link: linkUrl, // 赋值
                 childNode: [],
             };
 
@@ -199,7 +215,6 @@ export async function getFlowDate(flowConfig: FlowConfig): Promise<FlowNodeData[
             }
         });
 
-        // 组装父子关系
         childWithParent.forEach((child) => {
             const parent = flowData.find((p) => p.recordID === child.parentRecordID);
             if (parent) parent.childNode.push(child);
@@ -207,7 +222,6 @@ export async function getFlowDate(flowConfig: FlowConfig): Promise<FlowNodeData[
 
         return flowData;
     } catch (error) {
-        // 生产环境建议使用埋点上报
         return [];
     }
 }
