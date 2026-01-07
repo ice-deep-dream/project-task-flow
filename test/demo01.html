@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .container {
+            display: grid;
+            gap: 10px;
+        }
+        .flow-item-child {
+            border: 1px solid #000;
+            padding: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container" id="container">
+    <div class="flow-item-child" style="order: 2;">2</div>
+    <div class="flow-item-child" style="order: 2;">2</div>
+    <div class="flow-item-child" style="order: 4;">4</div>
+</div>
+
+<script>
+    const container = document.getElementById('container');
+    const items = Array.from(container.children);
+
+    // 按 order 值从大到小排序
+    items.sort((a, b) => b.style.order - a.style.order);
+
+    // 分组并重新排列
+    const orderGroups = {};
+    items.forEach(item => {
+        const order = item.style.order;
+        if (!orderGroups[order]) {
+            orderGroups[order] = [];
+        }
+        orderGroups[order].push(item);
+    });
+
+    // 清空容器
+    container.innerHTML = '';
+
+    // 重新设置网格布局，列数为 orderGroups 的数量
+    container.style.gridTemplateColumns = `repeat(${Object.keys(orderGroups).length}, auto)`;
+
+    // 按顺序插入元素
+    Object.keys(orderGroups).sort((a, b) => b - a).forEach(order => {
+        orderGroups[order].forEach(item => {
+            container.appendChild(item);
+        });
+    });
+</script>
+</body>
+</html>

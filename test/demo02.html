@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <style>
+    .container {
+      display: flex;
+      flex-direction:row;
+    }
+    #a {
+      height: 100px;
+      width: 100px;
+      border: 1px red solid;
+      margin-right: 100px;
+    }
+
+    #b {
+      height: 100px;
+      width: 100px;
+      border: 1px green solid;
+    }
+  </style>
+</head>
+
+<body>
+<div class="container">
+  <div id="a"></div>
+  <div id="b"></div>
+</div>
+
+
+<canvas id="myCanvas" width="400" height="400"></canvas>
+<script>
+  const div = document.getElementById('a');
+  const rect = div.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  console.log(`中心 X 坐标: ${centerX}, 中心 Y 坐标: ${centerY}`);
+
+  const div2 = document.getElementById('b');
+  const rect2 = div2.getBoundingClientRect();
+  const centerX2 = rect2.left + rect2.width / 2;
+  const centerY2 = rect2.top + rect2.height / 2;
+  console.log(`中心 X 坐标: ${centerX2}, 中心 Y 坐标: ${centerY2}`);
+  // 获取 canvas 元素和上下文
+  const canvas = document.getElementById('myCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // 定义点的坐标
+  const point1 = { x: centerX, y: centerY };
+  const point2 = { x: centerX2, y: centerY2 };
+
+  // 绘制线条
+  ctx.beginPath();
+  ctx.lineTo(point2.x, point2.y);
+  ctx.strokeStyle ='red';
+  ctx.stroke();
+
+</script>
+</body>
+
+</html>
