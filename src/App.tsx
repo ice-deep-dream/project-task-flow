@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ConfigProvider } from '@douyinfe/semi-ui';
 import { dashboard, DashboardState } from '@lark-base-open/js-sdk';
 import FlowChart from './components/FlowChart';
-import { FlowNodeData, FlowConfig } from './components/FlowChart/types'; // 🆕 引入 FlowConfig 类型
+import { FlowNodeData, FlowConfig } from './components/FlowChart/types';
 import './App.scss';
 
 import 'reset-css';
@@ -14,7 +14,7 @@ import '@semi-bot/semi-theme-feishu-dashboard/semi.css';
 const App: React.FC = () => {
     // 流程节点数据状态管理
     const [flowNodeData, setFlowNodeData] = useState<FlowNodeData[]>([]);
-    // 🆕 1. 新增：流程配置状态管理
+    // 流程配置状态管理
     const [flowConfig, setFlowConfig] = useState<FlowConfig | undefined>(undefined);
 
     // 应用加载状态
@@ -39,14 +39,18 @@ const App: React.FC = () => {
             if (dashboard.state === DashboardState.View) {
                 // 查看模式：加载已保存的配置数据
                 try {
-                    const config = await dashboard.getConfig();
-                    if (config?.customConfig) {
-                        // 🆕 2. 同时加载 Data 和 Config
-                        if (Array.isArray(config.customConfig.data)) {
-                            setFlowNodeData(config.customConfig.data);
+                    const res = await dashboard.getConfig();
+                    // 🔧 修复点：使用 'as any' 进行类型断言，解决 TS2345 错误
+                    const customConfig = res?.customConfig as any;
+
+                    if (customConfig) {
+                        // 1. 加载数据
+                        if (Array.isArray(customConfig.data)) {
+                            setFlowNodeData(customConfig.data);
                         }
-                        if (config.customConfig.config) {
-                            setFlowConfig(config.customConfig.config);
+                        // 2. 加载配置
+                        if (customConfig.config) {
+                            setFlowConfig(customConfig.config as FlowConfig);
                         }
                     } else {
                         setFlowNodeData([]);
@@ -107,7 +111,7 @@ const App: React.FC = () => {
                 <FlowChart
                     flowNodeData={flowNodeData}
                     handleFlowNodeData={handleFlowNodeData}
-                    defaultConfig={flowConfig} // 🆕 3. 将配置传给子组件
+                    defaultConfig={flowConfig}
                 />
             </div>
         </ConfigProvider>
