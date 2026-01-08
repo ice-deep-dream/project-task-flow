@@ -141,87 +141,84 @@ export function pickLinkUrl(value: unknown): string {
 // 📊 核心数据获取逻辑
 // ============================================================================
 export async function getFlowDate(flowConfig: FlowConfig): Promise<FlowNodeData[]> {
-    try {
-        if (!flowConfig?.tableNameId) return [];
-        const getTableListRes = await base.getTableList();
-        const flowConfigTable = getTableListRes.filter((item) => item.id === flowConfig.tableNameId);
-        if (flowConfigTable.length === 0) return [];
+    // ⚠️ 关键修改：移除最外层的 try...catch，让错误抛出给调用者处理，避免静默失败返回空数组
+    if (!flowConfig?.tableNameId) return [];
+    const getTableListRes = await base.getTableList();
+    const flowConfigTable = getTableListRes.filter((item) => item.id === flowConfig.tableNameId);
+    if (flowConfigTable.length === 0) return [];
 
-        const param = { pageSize: 200 };
-        const records = await flowConfigTable[0].getRecords(param);
+    const param = { pageSize: 200 };
+    const records = await flowConfigTable[0].getRecords(param);
 
-        const recordSort = records.records.sort((a, b) => {
-            if (!flowConfig.targetDataId) return 0;
-            const dateA = new Date(a.fields[flowConfig.targetDataId] as string);
-            const dateB = new Date(b.fields[flowConfig.targetDataId] as string);
-            return dateA.getTime() - dateB.getTime();
-        });
+    const recordSort = records.records.sort((a, b) => {
+        if (!flowConfig.targetDataId) return 0;
+        const dateA = new Date(a.fields[flowConfig.targetDataId] as string);
+        const dateB = new Date(b.fields[flowConfig.targetDataId] as string);
+        return dateA.getTime() - dateB.getTime();
+    });
 
-        const flowData: FlowNodeData[] = [];
-        const childWithParent: (FlowNodeData & { parentRecordID: string })[] = [];
+    const flowData: FlowNodeData[] = [];
+    const childWithParent: (FlowNodeData & { parentRecordID: string })[] = [];
 
-        recordSort.forEach((item) => {
-            let statusInfo = { value: 0 };
-            if (flowConfig.statusId) {
-                const statusField = item.fields[flowConfig.statusId] as IOpenSingleSelect;
-                const statusText = pickTextFromCellValue(statusField);
+    recordSort.forEach((item) => {
+        let statusInfo = { value: 0 };
+        if (flowConfig.statusId) {
+            const statusField = item.fields[flowConfig.statusId] as IOpenSingleSelect;
+            const statusText = pickTextFromCellValue(statusField);
 
-                if (statusText === '未启动') statusInfo.value = 0;
-                else if (statusText === '进行中') statusInfo.value = 1;
-                else if (statusText === '已完成') statusInfo.value = 2;
-                else if (statusText === '暂停') statusInfo.value = 3;
-                else {
-                    const found = StatusArrInfo.find((e) => e.label === statusText);
-                    statusInfo.value = found ? found.value : 0;
-                }
+            if (statusText === '未启动') statusInfo.value = 0;
+            else if (statusText === '进行中') statusInfo.value = 1;
+            else if (statusText === '已完成') statusInfo.value = 2;
+            else if (statusText === '暂停') statusInfo.value = 3;
+            else {
+                const found = StatusArrInfo.find((e) => e.label === statusText);
+                statusInfo.value = found ? found.value : 0;
             }
+        }
 
-            const titleField = item.fields[flowConfig.titleId];
-            const titleText = pickTextFromCellValue(titleField);
+        const titleField = item.fields[flowConfig.titleId];
+        const titleText = pickTextFromCellValue(titleField);
 
-            const ownerField = flowConfig.ownerId ? item.fields[flowConfig.ownerId] : null;
-            const ownerName = pickOwnerName(ownerField);
+        const ownerField = flowConfig.ownerId ? item.fields[flowConfig.ownerId] : null;
+        const ownerName = pickOwnerName(ownerField);
 
-            const planDateRaw = flowConfig.targetDataId ? (item.fields[flowConfig.targetDataId] as string) : null;
-            const finishDateRaw = flowConfig.finishDataId ? (item.fields[flowConfig.finishDataId] as string) : null;
+        const planDateRaw = flowConfig.targetDataId ? (item.fields[flowConfig.targetDataId] as string) : null;
+        const finishDateRaw = flowConfig.finishDataId ? (item.fields[flowConfig.finishDataId] as string) : null;
 
-            // 🆕 获取超链接数据
-            const linkField = flowConfig.linkId ? item.fields[flowConfig.linkId] : null;
-            const linkUrl = pickLinkUrl(linkField); // 这里会调用修复后的函数
+        // 🆕 获取超链接数据
+        const linkField = flowConfig.linkId ? item.fields[flowConfig.linkId] : null;
+        const linkUrl = pickLinkUrl(linkField);
 
-            const recordData: FlowNodeData = {
-                id: 0,
-                status: statusInfo.value,
-                title: titleText,
-                planDate: planDateRaw ? dayjs(planDateRaw).format('YYYY-MM-DD') : '',
-                finishDate: finishDateRaw ? dayjs(finishDateRaw).format('YYYY-MM-DD') : '',
-                recordID: item.recordId,
-                description: '',
-                owners: ownerName,
-                link: linkUrl, // 赋值
-                childNode: [],
-            };
+        const recordData: FlowNodeData = {
+            id: 0,
+            status: statusInfo.value,
+            title: titleText,
+            planDate: planDateRaw ? dayjs(planDateRaw).format('YYYY-MM-DD') : '',
+            finishDate: finishDateRaw ? dayjs(finishDateRaw).format('YYYY-MM-DD') : '',
+            recordID: item.recordId,
+            description: '',
+            owners: ownerName,
+            link: linkUrl,
+            childNode: [],
+        };
 
-            const linkRaw = flowConfig.titleChildId ? item.fields[flowConfig.titleChildId] : null;
-            if (!linkRaw) {
-                flowData.push(recordData);
+        const linkRaw = flowConfig.titleChildId ? item.fields[flowConfig.titleChildId] : null;
+        if (!linkRaw) {
+            flowData.push(recordData);
+        } else {
+            const recordIds = pickLinkRecordIds(linkRaw as IOpenLink);
+            if (recordIds.length > 0) {
+                childWithParent.push({ ...recordData, parentRecordID: recordIds[0] });
             } else {
-                const recordIds = pickLinkRecordIds(linkRaw as IOpenLink);
-                if (recordIds.length > 0) {
-                    childWithParent.push({ ...recordData, parentRecordID: recordIds[0] });
-                } else {
-                    flowData.push(recordData);
-                }
+                flowData.push(recordData);
             }
-        });
+        }
+    });
 
-        childWithParent.forEach((child) => {
-            const parent = flowData.find((p) => p.recordID === child.parentRecordID);
-            if (parent) parent.childNode.push(child);
-        });
+    childWithParent.forEach((child) => {
+        const parent = flowData.find((p) => p.recordID === child.parentRecordID);
+        if (parent) parent.childNode.push(child);
+    });
 
-        return flowData;
-    } catch (error) {
-        return [];
-    }
+    return flowData;
 }

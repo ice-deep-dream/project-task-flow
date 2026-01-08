@@ -17,9 +17,9 @@ import ConfigPanel from './ConfigPanel';
 const FlowChart: React.FC<{
     flowNodeData: FlowNodeData[];
     handleFlowNodeData: HandleFlowNodeData;
-    defaultConfig?: FlowConfig; // 🆕 1. 新增 Prop：接收外部传入的初始配置
+    defaultConfig?: FlowConfig;
 }> = React.memo((props) => {
-    // 🆕 2. 状态初始化：优先使用传入的配置
+    // 状态初始化：优先使用传入的配置
     const [flowConfig, setFlowConfig] = useState<FlowConfig | undefined>(props.defaultConfig);
     const [currentState, setCurrentState] = useState(dashboard.state);
     const [zoom, setZoom] = useState(1);
@@ -28,7 +28,7 @@ const FlowChart: React.FC<{
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const handleFlowNodeDataRef = useRef(props.handleFlowNodeData);
 
-    // 🆕 3. 监听外部配置变化 (修复 View 模式下配置不生效的问题)
+    // 监听外部配置变化
     useEffect(() => {
         if (props.defaultConfig) {
             setFlowConfig(props.defaultConfig);
@@ -56,16 +56,25 @@ const FlowChart: React.FC<{
             await dashboard.getData();
             const cfg = await dashboard.getConfig();
             const savedFlowConfig = (cfg?.customConfig as any)?.config;
+
             if (!isValidFlowConfig(savedFlowConfig)) {
+                // 如果是配置本身无效，可以清空
                 handleFlowNodeDataRef.current([]);
                 return;
             }
-            // 这里依然保留，确保能获取到最新的配置（双重保险）
+
             setFlowConfig(savedFlowConfig);
+
+            // ⚠️ 核心修改：这里如果 getFlowDate 抛错，会进入 catch，而不会执行下一行
             const newFlowData = await getFlowDate(savedFlowConfig);
-            handleFlowNodeDataRef.current(Array.isArray(newFlowData) ? newFlowData : []);
+
+            // 只有成功获取到数据才更新
+            if (Array.isArray(newFlowData)) {
+                handleFlowNodeDataRef.current(newFlowData);
+            }
         } catch (e) {
-            handleFlowNodeDataRef.current([]);
+            // ⚠️ 核心修改：捕获错误，只打印日志，绝对不要清空数据
+            console.error('自动刷新数据失败，保持原有数据显示', e);
         }
     }, []);
 
