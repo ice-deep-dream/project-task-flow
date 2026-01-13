@@ -18,7 +18,6 @@ node_modules/
 # =========================
 # Build Outputs (Vite / Webpack)
 # =========================
-dist/
 build/
 out/
 *.log
